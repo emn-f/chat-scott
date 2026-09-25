@@ -1,0 +1,17 @@
+{
+  "java.project.sourcePaths": ["server", "client"],
+  "java.project.outputPath": "bin",
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.format.enabled": true,
+  "java.autobuild.enabled": true,
+  "java.compiler.lint": "all",
+  "java.errors.incompleteClasspath.severity": "warning",
+  "[java]": {
+    "editor.defaultFormatter": "redhat.java",
+    "editor.formatOnSave": true,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true
+}

@@ -13,6 +13,7 @@ import javax.swing.SwingUtilities;
  */
 public class ChatClientImpl extends UnicastRemoteObject implements ChatClientInterface {
 
+    private static final long serialVersionUID = 1L;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
     private final Consumer<String> messageConsumer;
 

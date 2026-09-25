@@ -167,3 +167,17 @@ Na máquina cliente:
 
 ### `ChatClientInterface`
 - `void receiveMessage(String username, String message) throws RemoteException`
+
+---
+
+## 🔍 Linting e Análise Estática
+
+O projeto está configurado para análise estática rigorosa:
+
+- **Configuração no VS Code (`.vscode/settings.json`):** Formatação automática ao salvar, organização de imports e linting integrado do compilador Java ativado.
+- **Compilação com Verificação de Lint Completa (`-Xlint:all`):**
+  ```powershell
+  javac -Xlint:all -d bin server/*.java client/*.java
+  ```
+  O código compila com **0 warnings e 0 erros**.
+

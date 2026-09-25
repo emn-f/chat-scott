@@ -16,6 +16,7 @@ import client.ChatClientInterface;
  */
 public class ChatServerImpl extends UnicastRemoteObject implements ChatServerInterface {
 
+    private static final long serialVersionUID = 1L;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     // Registro concorrente dos clientes conectados: Nome de Usuário -> Stub Remoto

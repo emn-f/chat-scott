@@ -1,6 +1,7 @@
 bin/
 *.class
 *.log
-.vscode/
 .idea/
 *.iml
+.vscode/*
+!.vscode/settings.json
