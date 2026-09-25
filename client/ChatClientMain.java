@@ -2,7 +2,6 @@ package client;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -10,14 +9,20 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.HashMap;
+import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -30,13 +35,14 @@ import javax.swing.UIManager;
 import server.ChatServerInterface;
 
 /**
- * Interface gráfica Swing e cliente RMI do Chat Scott.
+ * Interface grafica Swing e cliente RMI do Chat Scott.
+ * Carrega configuracoes de arquivo .env, variaveis de ambiente ou argumentos CLI.
  */
 public class ChatClientMain {
 
-    private static final String DEFAULT_SERVICE_NAME = "ChatService";
-    private static final String DEFAULT_HOST = "localhost";
-    private static final int DEFAULT_PORT = 1099;
+    public static final String DEFAULT_SERVICE_NAME = "ChatService";
+    public static final String DEFAULT_HOST = "localhost";
+    public static final int DEFAULT_PORT = 1099;
 
     private String username;
     private String host;
@@ -60,16 +66,31 @@ public class ChatClientMain {
     }
 
     public static void main(String[] args) {
-        // Ajusta Look and Feel para o padrão do sistema operacional
+        // Ajusta Look and Feel para o padrao do sistema operacional
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignored) {
         }
 
+        // Carrega variaveis do arquivo .env se disponivel
+        Map<String, String> env = loadEnv();
+
+        int defaultPort = DEFAULT_PORT;
+        String envPort = getEnvOrProperty(env, "CHAT_PORT", null);
+        if (envPort != null) {
+            try {
+                defaultPort = Integer.parseInt(envPort);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        String defaultHost = getEnvOrProperty(env, "CHAT_HOST", DEFAULT_HOST);
+        String defaultServiceName = getEnvOrProperty(env, "CHAT_SERVICE_NAME", DEFAULT_SERVICE_NAME);
+
         String username = null;
-        String host = DEFAULT_HOST;
-        int port = DEFAULT_PORT;
-        String serviceName = DEFAULT_SERVICE_NAME;
+        String host = defaultHost;
+        int port = defaultPort;
+        String serviceName = defaultServiceName;
 
         // Se passado via linha de comando: [apelido] [host] [porta] [nomeServico]
         if (args.length > 0 && !args[0].trim().isEmpty()) {
@@ -82,18 +103,18 @@ public class ChatClientMain {
             try {
                 port = Integer.parseInt(args[2].trim());
             } catch (NumberFormatException e) {
-                System.err.println("Porta inválida nos argumentos. Usando padrão " + DEFAULT_PORT);
+                System.err.println("Porta invalida nos argumentos. Usando " + defaultPort);
             }
         }
         if (args.length > 3 && !args[3].trim().isEmpty()) {
             serviceName = args[3].trim();
         }
 
-        // Se o apelido não foi informado via CLI, exibe diálogo de conexão
+        // Se o apelido nao foi informado via CLI, exibe dialogo de conexao
         if (username == null || username.isEmpty()) {
             ConnectionConfig config = promptConnectionConfig(host, port);
             if (config == null) {
-                System.out.println("Conexão cancelada pelo usuário.");
+                System.out.println("Conexao cancelada pelo usuario.");
                 System.exit(0);
             }
             username = config.username;
@@ -106,12 +127,12 @@ public class ChatClientMain {
     }
 
     /**
-     * Inicializa a interface Swing e estabelece a conexão RMI.
+     * Inicializa a interface Swing e estabelece a conexao RMI.
      */
     private void initAndConnect() {
         buildGui();
 
-        // Conecta ao servidor em uma thread separada para não travar a GUI
+        // Conecta ao servidor em uma thread separada para nao travar a GUI
         new Thread(() -> {
             try {
                 connectToServer();
@@ -119,7 +140,7 @@ public class ChatClientMain {
                 SwingUtilities.invokeLater(() -> {
                     JOptionPane.showMessageDialog(frame,
                             "Falha ao conectar ao servidor:\n" + e.getMessage(),
-                            "Erro de Conexão RMI",
+                            "Erro de Conexao RMI",
                             JOptionPane.ERROR_MESSAGE);
                     frame.dispose();
                     System.exit(1);
@@ -129,7 +150,7 @@ public class ChatClientMain {
     }
 
     /**
-     * Constrói a janela principal do chat Swing.
+     * Constroi a janela principal do chat Swing.
      */
     private void buildGui() {
         frame = new JFrame("Chat Scott - " + username + " (" + host + ":" + port + ")");
@@ -148,7 +169,7 @@ public class ChatClientMain {
         JPanel mainPanel = new JPanel(new BorderLayout(8, 8));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Topo: Barra de status informando dados da conexão
+        // Topo: Barra de status informando dados da conexao
         JPanel topPanel = new JPanel(new BorderLayout());
         statusLabel = new JLabel("Conectando a " + host + ":" + port + "...");
         statusLabel.setFont(new Font("SansSerif", Font.ITALIC, 12));
@@ -176,12 +197,12 @@ public class ChatClientMain {
         JPanel bottomPanel = new JPanel(new BorderLayout(8, 0));
         messageField = new JTextField();
         messageField.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        messageField.setEnabled(false); // habilitado após conectar com sucesso
+        messageField.setEnabled(false); // habilitado apos conectar com sucesso
 
         sendButton = new JButton("Enviar");
         sendButton.setEnabled(false);
 
-        // Ações de envio (ao teclar Enter ou clicar no botão)
+        // Acoes de envio (ao teclar Enter ou clicar no botao)
         messageField.addActionListener(this::onSendMessage);
         sendButton.addActionListener(this::onSendMessage);
 
@@ -195,14 +216,13 @@ public class ChatClientMain {
     }
 
     /**
-     * Conecta ao RMI Registry, obtém a referência remota do servidor e registra o cliente.
+     * Conecta ao RMI Registry, obtem a referencia remota do servidor e registra o cliente.
      */
     private void connectToServer() throws Exception {
-        // Se estiver conectando a um host remoto e java.rmi.server.hostname não estiver definido,
-        // detecta o IP local da interface de rede que alcança o servidor para que os callbacks funcionem.
+        // Garante configuracao de hostname no cliente para funcionamento dos callbacks
         configureClientHostname(host, port);
 
-        // 1. Obtém o Registry do servidor
+        // 1. Obtem o Registry do servidor
         Registry registry = LocateRegistry.getRegistry(host, port);
 
         // 2. Faz o lookup da interface remota do servidor
@@ -223,7 +243,7 @@ public class ChatClientMain {
     }
 
     /**
-     * Garante que o IP correto da máquina cliente seja configurado para RMI callbacks.
+     * Garante que o IP correto da maquina cliente seja configurado para RMI callbacks.
      */
     private static void configureClientHostname(String targetHost, int targetPort) {
         if (System.getProperty("java.rmi.server.hostname") == null) {
@@ -238,13 +258,13 @@ public class ChatClientMain {
                     }
                 }
             } catch (Exception ignored) {
-                // Deixa o RMI utilizar a resolução padrão caso o socket de teste falhe
+                // Mantem resolucao padrao em caso de falha no socket de teste
             }
         }
     }
 
     /**
-     * Trata o envio de mensagens acionado pelo usuário.
+     * Trata o envio de mensagens acionado pelo usuario.
      */
     private void onSendMessage(ActionEvent e) {
         String text = messageField.getText().trim();
@@ -255,21 +275,21 @@ public class ChatClientMain {
         messageField.setText("");
         messageField.requestFocusInWindow();
 
-        // Envia de forma assíncrona para manter a interface responsiva
+        // Envia de forma assincrona para manter a interface responsiva
         new Thread(() -> {
             try {
                 server.sendMessage(username, text);
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
                     appendMessage("[Erro] Falha ao enviar mensagem: " + ex.getMessage() + "\n");
-                    statusLabel.setText("Erro de comunicação com o servidor.");
+                    statusLabel.setText("Erro de comunicacao com o servidor.");
                 });
             }
         }).start();
     }
 
     /**
-     * Acrescenta uma mensagem na área de texto e rola até o final.
+     * Acrescenta uma mensagem na area de texto e rola ate o final.
      *
      * @param text texto a ser exibido
      */
@@ -279,7 +299,7 @@ public class ChatClientMain {
     }
 
     /**
-     * Notifica o servidor da desconexão, cancela o export do callback e fecha a aplicação.
+     * Notifica o servidor da desconexao, cancela o export do callback e fecha a aplicacao.
      */
     private void disconnectAndExit() {
         if (server != null && username != null) {
@@ -304,7 +324,7 @@ public class ChatClientMain {
     }
 
     /**
-     * Diálogo modal para configuração de apelido e servidor caso não seja fornecido por linha de comando.
+     * Dialogo modal para configuracao de apelido e servidor caso nao seja fornecido por linha de comando.
      */
     private static ConnectionConfig promptConnectionConfig(String defaultHost, int defaultPort) {
         JTextField nameField = new JTextField(15);
@@ -345,7 +365,7 @@ public class ChatClientMain {
 
         String username = nameField.getText().trim();
         if (username.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "O apelido é obrigatório.", "Aviso", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(null, "O apelido e obrigatorio.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return promptConnectionConfig(defaultHost, defaultPort);
         }
 
@@ -358,11 +378,58 @@ public class ChatClientMain {
         try {
             port = Integer.parseInt(portField.getText().trim());
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(null, "Porta inválida. Utilizando " + defaultPort, "Aviso", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(null, "Porta invalida. Utilizando " + defaultPort, "Aviso",
+                    JOptionPane.WARNING_MESSAGE);
             port = defaultPort;
         }
 
         return new ConnectionConfig(username, host, port);
+    }
+
+    /**
+     * Carrega configuracoes de um arquivo .env se presente.
+     */
+    private static Map<String, String> loadEnv() {
+        Map<String, String> env = new HashMap<>();
+        File[] candidates = new File[] { new File(".env"), new File("../.env") };
+        for (File file : candidates) {
+            if (file.exists() && file.isFile()) {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.startsWith("#")) {
+                            continue;
+                        }
+                        int eqIndex = line.indexOf('=');
+                        if (eqIndex > 0) {
+                            String key = line.substring(0, eqIndex).trim();
+                            String value = line.substring(eqIndex + 1).trim();
+                            if ((value.startsWith("\"") && value.endsWith("\""))
+                                    || (value.startsWith("'") && value.endsWith("'"))) {
+                                value = value.substring(1, value.length() - 1);
+                            }
+                            env.putIfAbsent(key, value);
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+                break;
+            }
+        }
+        return env;
+    }
+
+    private static String getEnvOrProperty(Map<String, String> fileEnv, String key, String defaultValue) {
+        String val = fileEnv.get(key);
+        if (val == null || val.trim().isEmpty()) {
+            val = System.getenv(key);
+        }
+        if (val == null || val.trim().isEmpty()) {
+            val = System.getProperty(key);
+        }
+        return (val != null && !val.trim().isEmpty()) ? val.trim() : defaultValue;
     }
 
     private static class ConnectionConfig {

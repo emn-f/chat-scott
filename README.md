@@ -31,13 +31,15 @@ O sistema adota o padrão cliente-servidor com **callbacks remotos RMI**:
 chat-scott/
 ├── server/
 │   ├── ChatServerInterface.java  # Interface remota do servidor
-│   ├── ChatServerImpl.java       # Implementação remota e controle de conexões
-│   └── ChatServerMain.java       # Criação do Registry (1099) e bind do serviço
+│   ├── ChatServerImpl.java       # Implementacao remota e controle de conexoes
+│   └── ChatServerMain.java       # Criacao do Registry e bind do servico
 ├── client/
 │   ├── ChatClientInterface.java  # Interface remota do callback do cliente
-│   ├── ChatClientImpl.java       # Implementação remota do callback (EDT Swing)
-│   └── ChatClientMain.java       # Interface gráfica Swing e fluxo de conexão
-└── README.md                     # Documentação completa de uso e testes
+│   ├── ChatClientImpl.java       # Implementacao remota do callback (EDT Swing)
+│   └── ChatClientMain.java       # Interface grafica Swing e fluxo de conexao
+├── .env.example                  # Modelo de variaveis de ambiente
+├── .env                          # Configuracoes locais (ignorado no git)
+└── README.md                     # Documentacao completa de uso e testes
 ```
 
 ---
@@ -75,7 +77,7 @@ java -cp bin server.ChatServerMain
 ```
 
 Por padrão:
-- O **RMI Registry** é iniciado na porta **1099**.
+- O **RMI Registry** é iniciado na porta **1099** (ou valor definido no `.env`).
 - O serviço é registrado com o nome **`ChatService`**.
 - Argumentos opcionais: `java -cp bin server.ChatServerMain [porta] [hostname] [nomeServico]`
 
@@ -88,7 +90,7 @@ java -cp bin client.ChatClientMain
 
 Uma janela de diálogo será exibida para informar:
 - **Apelido (Nickname):** ex. `Alice`
-- **Host do Servidor:** `localhost`
+- **Host do Servidor:** `localhost` (ou preenchido via `.env`)
 - **Porta do Registry:** `1099`
 
 *(Dica: você também pode passar os dados diretamente via linha de comando: `java -cp bin client.ChatClientMain Alice`)*
@@ -104,6 +106,26 @@ Envie mensagens pela interface gráfica e observe a entrega instantânea em todo
 
 ---
 
+## ⚙️ Configuração via Arquivo `.env`
+
+Você pode configurar portas, hosts e nome do serviço através do arquivo `.env` na raiz do projeto sem precisar alterar o código ou passar argumentos sempre:
+
+1. Copie o modelo `.env.example`:
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+2. Defina as variáveis desejadas:
+   ```dotenv
+   CHAT_PORT=1099
+   CHAT_HOST=localhost
+   CHAT_SERVICE_NAME=ChatService
+   # CHAT_SERVER_IP=10.8.185.5
+   ```
+3. A ordem de precedência adotada é:
+   `Argumentos de Linha de Comando` > `Arquivo .env` > `Variáveis do Sistema` > `Valores Padrão`.
+
+---
+
 ## 🌐 Teste em Rede (Duas Máquinas Diferentes)
 
 Para testar entre computadores distintos conectados na mesma rede local (Wi-Fi ou Ethernet):
@@ -114,7 +136,7 @@ Na máquina que executará o servidor, descubra o IP local:
 - **Linux/macOS:** execute `ip a` ou `ifconfig`.
 
 ### 2. Configurar o Firewall no Servidor
-Certifique-se de que a porta **1099 TCP** esteja liberada no firewall do sistema operacional da máquina do servidor, ou permita a comunicação da JVM quando a caixa de diálogo do firewall solicitar.
+Certifique-se de que a porta **1097 TCP** esteja liberada no firewall do sistema operacional da máquina do servidor, ou permita a comunicação da JVM quando a caixa de diálogo do firewall solicitar.
 
 ### 3. Iniciar o Servidor com o IP da Rede
 O Java RMI incorpora o IP do servidor nos stubs remotos enviados aos clientes. Se não for especificado, pode adotar `127.0.0.1`, impedindo conexões externas.
@@ -122,7 +144,7 @@ O Java RMI incorpora o IP do servidor nos stubs remotos enviados aos clientes. S
 Inicie o servidor informando o IP real da máquina:
 
 ```bash
-java -cp bin server.ChatServerMain 1099 192.168.1.50
+java -cp bin server.ChatServerMain 1097 192.168.1.50
 ```
 
 *(Ou via propriedade do sistema: `java -Djava.rmi.server.hostname=192.168.1.50 -cp bin server.ChatServerMain`)*
@@ -132,7 +154,7 @@ Na máquina cliente:
 1. Copie o projeto compilado (ou compile o repositório clonado).
 2. Execute o cliente informando o IP do servidor:
    ```bash
-   java -cp bin client.ChatClientMain Bob 192.168.1.50 1099
+   java -cp bin client.ChatClientMain Bob 192.168.1.50 1097
    ```
    *Ou execute sem argumentos e digite o IP `192.168.1.50` no diálogo de conexão.*
 

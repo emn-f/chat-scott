@@ -5,3 +5,4 @@ bin/
 *.iml
 .vscode/*
 !.vscode/settings.json
+.env
