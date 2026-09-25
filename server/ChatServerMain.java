@@ -4,17 +4,21 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
+import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Ponto de entrada do servidor de chat.
- * Carrega configuracoes do arquivo .env ou argumentos e inicializa o RMI Registry.
+ * Carrega configuracoes do arquivo .env ou argumentos e inicializa o RMI Registry,
+ * exibindo o IP real da rede local ao inves de localhost.
  */
 public class ChatServerMain {
 
@@ -35,9 +39,18 @@ public class ChatServerMain {
         }
 
         String serviceName = getEnvOrProperty(env, "CHAT_SERVICE_NAME", DEFAULT_SERVICE_NAME);
+
+        // Detecta o IP real da rede para exibicao e configuracao do RMI
+        String localIp = detectLocalIp();
+
         String hostname = getEnvOrProperty(env, "CHAT_SERVER_IP", null);
-        if (hostname == null) {
-            hostname = getEnvOrProperty(env, "CHAT_HOST", null);
+        if (hostname == null || hostname.trim().isEmpty() || "localhost".equalsIgnoreCase(hostname) || "127.0.0.1".equals(hostname)) {
+            String envHost = getEnvOrProperty(env, "CHAT_HOST", null);
+            if (envHost != null && !envHost.trim().isEmpty() && !"localhost".equalsIgnoreCase(envHost) && !"127.0.0.1".equals(envHost)) {
+                hostname = envHost.trim();
+            } else {
+                hostname = localIp;
+            }
         }
 
         // Sobrescrita por argumentos de linha de comando: [porta] [hostname] [nomeServico]
@@ -57,26 +70,15 @@ public class ChatServerMain {
             serviceName = args[2].trim();
         }
 
-        if (hostname != null && !hostname.trim().isEmpty()) {
-            System.setProperty("java.rmi.server.hostname", hostname.trim());
-        }
-
-        // Obtem o hostname configurado ou detecta o IP local
-        String currentHostname = System.getProperty("java.rmi.server.hostname");
-        if (currentHostname == null || currentHostname.isEmpty()) {
-            try {
-                currentHostname = InetAddress.getLocalHost().getHostAddress();
-            } catch (Exception e) {
-                currentHostname = "localhost";
-            }
-        }
+        // Configura o IP publicavel no stub RMI (evita que clientes tentem conectar em 127.0.0.1)
+        System.setProperty("java.rmi.server.hostname", hostname);
 
         System.out.println("==================================================");
         System.out.println("            SERVIDOR CHAT SCOTT (RMI)             ");
         System.out.println("==================================================");
         System.out.println("Porta do Registry  : " + port);
         System.out.println("Nome do Servico    : " + serviceName);
-        System.out.println("Endereco / Host    : " + currentHostname);
+        System.out.println("Endereco / Host    : " + hostname);
         System.out.println("--------------------------------------------------");
 
         try {
@@ -94,12 +96,41 @@ public class ChatServerMain {
 
             System.out.println("Servico publicado com sucesso como '" + serviceName + "'.");
             System.out.println("Servidor pronto e aguardando conexoes de clientes.");
+            System.out.println("Para conectar de qualquer PC na rede, use o IP: " + hostname);
             System.out.println("==================================================");
 
         } catch (Exception e) {
             System.err.println("Erro critico ao inicializar o servidor de chat: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
+        }
+    }
+
+    /**
+     * Detecta o endereco IPv4 real da maquina servidora na rede local.
+     */
+    public static String detectLocalIp() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                if (ni.isLoopback() || !ni.isUp()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        String ip = addr.getHostAddress();
+                        if (!ip.startsWith("127.")) {
+                            return ip;
+                        }
+                    }
+                }
+            }
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            return "127.0.0.1";
         }
     }
 

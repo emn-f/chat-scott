@@ -13,12 +13,16 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
+import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 import javax.swing.BorderFactory;
@@ -36,7 +40,8 @@ import server.ChatServerInterface;
 
 /**
  * Interface grafica Swing e cliente RMI do Chat Scott.
- * Carrega configuracoes de arquivo .env, variaveis de ambiente ou argumentos CLI.
+ * Carrega configuracoes de arquivo .env, variaveis de ambiente ou argumentos CLI,
+ * exibindo o IP do servidor em vez de localhost.
  */
 public class ChatClientMain {
 
@@ -84,7 +89,15 @@ public class ChatClientMain {
             }
         }
 
-        String defaultHost = getEnvOrProperty(env, "CHAT_HOST", DEFAULT_HOST);
+        String localIp = detectLocalIp();
+        String defaultHost = getEnvOrProperty(env, "CHAT_SERVER_IP", null);
+        if (defaultHost == null || defaultHost.trim().isEmpty()) {
+            defaultHost = getEnvOrProperty(env, "CHAT_HOST", null);
+        }
+        if (defaultHost == null || defaultHost.trim().isEmpty() || "localhost".equalsIgnoreCase(defaultHost) || "127.0.0.1".equals(defaultHost)) {
+            defaultHost = localIp;
+        }
+
         String defaultServiceName = getEnvOrProperty(env, "CHAT_SERVICE_NAME", DEFAULT_SERVICE_NAME);
 
         String username = null;
@@ -110,7 +123,7 @@ public class ChatClientMain {
             serviceName = args[3].trim();
         }
 
-        // Se o apelido nao foi informado via CLI, exibe dialogo de conexao
+        // Se o apelido nao foi informado via CLI, exibe dialogo de conexao com o IP do servidor
         if (username == null || username.isEmpty()) {
             ConnectionConfig config = promptConnectionConfig(host, port);
             if (config == null) {
@@ -169,9 +182,9 @@ public class ChatClientMain {
         JPanel mainPanel = new JPanel(new BorderLayout(8, 8));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Topo: Barra de status informando dados da conexao
+        // Topo: Barra de status informando dados da conexao com IP real
         JPanel topPanel = new JPanel(new BorderLayout());
-        statusLabel = new JLabel("Conectando a " + host + ":" + port + "...");
+        statusLabel = new JLabel("Conectando ao servidor em " + host + ":" + port + "...");
         statusLabel.setFont(new Font("SansSerif", Font.ITALIC, 12));
         topPanel.add(statusLabel, BorderLayout.WEST);
 
@@ -342,7 +355,7 @@ public class ChatClientMain {
         panel.add(nameField, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1;
-        panel.add(new JLabel("Host do Servidor:"), gbc);
+        panel.add(new JLabel("IP / Host do Servidor:"), gbc);
         gbc.gridx = 1;
         panel.add(hostField, gbc);
 
@@ -384,6 +397,34 @@ public class ChatClientMain {
         }
 
         return new ConnectionConfig(username, host, port);
+    }
+
+    /**
+     * Detecta o endereco IPv4 real da maquina na rede local.
+     */
+    public static String detectLocalIp() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface ni = interfaces.nextElement();
+                if (ni.isLoopback() || !ni.isUp()) {
+                    continue;
+                }
+                Enumeration<InetAddress> addresses = ni.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        String ip = addr.getHostAddress();
+                        if (!ip.startsWith("127.")) {
+                            return ip;
+                        }
+                    }
+                }
+            }
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            return "127.0.0.1";
+        }
     }
 
     /**
