@@ -3,6 +3,7 @@ package client;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -40,8 +41,7 @@ import server.ChatServerInterface;
 
 /**
  * Interface grafica Swing e cliente RMI do Chat Scott.
- * Carrega configuracoes de arquivo .env, variaveis de ambiente ou argumentos CLI,
- * exibindo o IP do servidor em vez de localhost.
+ * Suporta execucao em modo grafico (padrao) ou modo terminal CLI (Termux / headless / --cli).
  */
 public class ChatClientMain {
 
@@ -71,10 +71,20 @@ public class ChatClientMain {
     }
 
     public static void main(String[] args) {
-        // Ajusta Look and Feel para o padrao do sistema operacional
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception ignored) {
+        // Detecta se esta rodando em ambiente sem interface grafica (ex: Termux) ou com flag --cli
+        boolean isCli = GraphicsEnvironment.isHeadless();
+        for (String arg : args) {
+            if ("--cli".equalsIgnoreCase(arg.trim()) || "-cli".equalsIgnoreCase(arg.trim())) {
+                isCli = true;
+                break;
+            }
+        }
+
+        if (!isCli) {
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception ignored) {
+            }
         }
 
         // Carrega variaveis do arquivo .env se disponivel
@@ -105,25 +115,45 @@ public class ChatClientMain {
         int port = defaultPort;
         String serviceName = defaultServiceName;
 
-        // Se passado via linha de comando: [apelido] [host] [porta] [nomeServico]
-        if (args.length > 0 && !args[0].trim().isEmpty()) {
+        // Leitura de argumentos CLI: [apelido] [host] [porta] [nomeServico]
+        if (args.length > 0 && !args[0].trim().isEmpty() && !args[0].startsWith("-")) {
             username = args[0].trim();
         }
-        if (args.length > 1 && !args[1].trim().isEmpty()) {
+        if (args.length > 1 && !args[1].trim().isEmpty() && !args[1].startsWith("-")) {
             host = args[1].trim();
         }
-        if (args.length > 2) {
+        if (args.length > 2 && !args[2].startsWith("-")) {
             try {
                 port = Integer.parseInt(args[2].trim());
             } catch (NumberFormatException e) {
                 System.err.println("Porta invalida nos argumentos. Usando " + defaultPort);
             }
         }
-        if (args.length > 3 && !args[3].trim().isEmpty()) {
+        if (args.length > 3 && !args[3].startsWith("-") && !args[3].trim().isEmpty()) {
             serviceName = args[3].trim();
         }
 
-        // Se o apelido nao foi informado via CLI, exibe dialogo de conexao com o IP do servidor
+        // Execucao em modo CLI (Termux / terminal puro)
+        if (isCli) {
+            if (username == null || username.isEmpty()) {
+                System.out.print("Digite seu apelido (nickname): ");
+                try {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+                    String input = br.readLine();
+                    if (input != null && !input.trim().isEmpty()) {
+                        username = input.trim();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (username == null || username.isEmpty()) {
+                username = "UsuarioTermux";
+            }
+            runCliClient(username, host, port, serviceName);
+            return;
+        }
+
+        // Execucao em modo Swing GUI (padrao desktop)
         if (username == null || username.isEmpty()) {
             ConnectionConfig config = promptConnectionConfig(host, port);
             if (config == null) {
@@ -137,6 +167,73 @@ public class ChatClientMain {
 
         ChatClientMain clientApp = new ChatClientMain(username, host, port, serviceName);
         SwingUtilities.invokeLater(clientApp::initAndConnect);
+    }
+
+    /**
+     * Execucao no modo terminal CLI (ideal para Termux / Android sem servidor X11).
+     */
+    private static void runCliClient(String username, String host, int port, String serviceName) {
+        System.out.println("==================================================");
+        System.out.println("         CHAT SCOTT (Modo Terminal CLI)           ");
+        System.out.println("==================================================");
+        System.out.println("Usuario  : " + username);
+        System.out.println("Servidor : " + host + ":" + port);
+        System.out.println("Servico  : " + serviceName);
+        System.out.println("--------------------------------------------------");
+        System.out.println("Conectando ao servidor...");
+
+        try {
+            configureClientHostname(host, port);
+            Registry registry = LocateRegistry.getRegistry(host, port);
+            ChatServerInterface server = (ChatServerInterface) registry.lookup(serviceName);
+
+            ChatClientImpl clientCallback = new ChatClientImpl(System.out::print);
+            server.registerClient(clientCallback, username);
+
+            System.out.println("Conectado com sucesso! Digite suas mensagens.");
+            System.out.println("Para desconectar e sair, digite '/sair' ou 'exit'.");
+            System.out.println("==================================================");
+
+            // Shutdown hook para desconectar se o processo for finalizado
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try {
+                    server.removeClient(username);
+                    UnicastRemoteObject.unexportObject(clientCallback, true);
+                } catch (Exception ignored) {
+                }
+            }));
+
+            try (BufferedReader consoleReader = new BufferedReader(
+                    new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = consoleReader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.equalsIgnoreCase("/sair") || line.equalsIgnoreCase("exit")) {
+                        break;
+                    }
+                    if (!line.isEmpty()) {
+                        try {
+                            server.sendMessage(username, line);
+                        } catch (Exception ex) {
+                            System.err.println("[Erro] Falha ao enviar mensagem: " + ex.getMessage());
+                        }
+                    }
+                }
+            }
+
+            try {
+                server.removeClient(username);
+                UnicastRemoteObject.unexportObject(clientCallback, true);
+            } catch (Exception ignored) {
+            }
+
+            System.out.println("Desconectado do chat.");
+            System.exit(0);
+
+        } catch (Exception e) {
+            System.err.println("Erro ao conectar ao servidor de chat: " + e.getMessage());
+            System.exit(1);
+        }
     }
 
     /**
